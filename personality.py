@@ -1,6 +1,13 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from trail import Trail
+
 from abc import ABC, abstractmethod
 from mountain import Mountain
-from trail import Trail
+
+
 
 class WalkerPersonality(ABC):
 
