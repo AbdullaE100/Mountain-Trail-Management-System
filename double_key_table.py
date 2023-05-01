@@ -28,7 +28,16 @@ class DoubleKeyTable(Generic[K1, K2, V]):
     HASH_BASE = 31
 
     def __init__(self, sizes:list|None=None, internal_sizes:list|None=None) -> None:
-        raise NotImplementedError()
+        if sizes is not None:
+            self.TABLE_SIZES = sizes
+        self.size_index = 0
+        self.array: ArrayR[LinearProbeTable[K2, V]] = ArrayR(self.TABLE_SIZES[self.size_index])
+        self.count = 0
+        if internal_sizes is not None:
+            self.INTERNAL_SIZES = internal_sizes
+        else:
+            self.INTERNAL_SIZES = self.TABLE_SIZES
+
 
     def hash1(self, key: K1) -> int:
         """
@@ -65,7 +74,23 @@ class DoubleKeyTable(Generic[K1, K2, V]):
         :raises KeyError: When the key pair is not in the table, but is_insert is False.
         :raises FullError: When a table is full and cannot be inserted.
         """
-        raise NotImplementedError()
+        position1 = self.hash1(key1)
+        print(f"_linear_probe: position1={position1}")
+        sub_table = self.array[position1]
+
+        if sub_table is None:
+            if is_insert:
+                sub_table = LinearProbeTable(sizes=self.INTERNAL_SIZES)
+                sub_table.hash = lambda k: self.hash2(k, sub_table)
+                self.array[position1] = sub_table
+            else:
+                print(f"_linear_probe: KeyError: key1={key1}, key2={key2}")
+                raise KeyError((key1, key2))
+
+        position2 = sub_table._linear_probe(key2, is_insert)
+        print(f"_linear_probe: position2={position2}")
+        return position1, position2
+        
 
     def iter_keys(self, key:K1|None=None) -> Iterator[K1|K2]:
         """
@@ -74,14 +99,32 @@ class DoubleKeyTable(Generic[K1, K2, V]):
         key = k:
             Returns an iterator of all keys in the bottom-hash-table for k.
         """
-        raise NotImplementedError()
+        if key is None:
+            for k1 in range(self.table_size):
+                if self.array[k1] is not None:
+                    yield k1
+        else:
+            position1 = self.hash1(key)
+            sub_table = self.array[position1]
+            if sub_table is None:
+                raise KeyError(key)
+            for k2 in sub_table.keys():
+                yield k2
+
 
     def keys(self, key:K1|None=None) -> list[K1]:
         """
         key = None: returns all top-level keys in the table.
         key = x: returns all bottom-level keys for top-level key x.
         """
-        raise NotImplementedError()
+        if key is None:
+            return [k1 for k1 in range(self.table_size) if self.array[k1] is not None]
+        else:
+            position1 = self.hash1(key)
+            sub_table = self.array[position1]
+            if sub_table is None:
+                raise KeyError(key)
+            return sub_table.keys()
 
     def iter_values(self, key:K1|None=None) -> Iterator[V]:
         """
@@ -90,14 +133,34 @@ class DoubleKeyTable(Generic[K1, K2, V]):
         key = k:
             Returns an iterator of all values in the bottom-hash-table for k.
         """
-        raise NotImplementedError()
+        if key is None:
+            for sub_table in self.array:
+                if sub_table is not None:
+                    for value in sub_table.values():
+                        yield value
+        else:
+            position1 = self.hash1(key)
+            sub_table = self.array[position1]
+            if sub_table is None:
+                raise KeyError(key)
+            for value in sub_table.values():
+                yield value
+
+
 
     def values(self, key:K1|None=None) -> list[V]:
         """
         key = None: returns all values in the table.
         key = x: returns all values for top-level key x.
         """
-        raise NotImplementedError()
+        if key is None:
+            return [value for sub_table in self.array if sub_table is not None for value in sub_table.values()]
+        else:
+            position1 = self.hash1(key)
+            sub_table = self.array[position1]
+            if sub_table is None:
+                raise KeyError(key)
+            return sub_table.values()
 
     def __contains__(self, key: tuple[K1, K2]) -> bool:
         """
@@ -118,14 +181,26 @@ class DoubleKeyTable(Generic[K1, K2, V]):
 
         :raises KeyError: when the key doesn't exist.
         """
-        raise NotImplementedError()
+        index1, index2 = self._linear_probe(key[0], key[1], False)
+        sub_table = self.array[index1]
+        return sub_table.array[index2][1]
 
     def __setitem__(self, key: tuple[K1, K2], data: V) -> None:
         """
         Set an (key, value) pair in our hash table.
         """
 
-        raise NotImplementedError()
+        index1, index2 = self._linear_probe(key[0], key[1], True)
+        sub_table = self.array[index1]
+
+        if sub_table.array[index2] is None:
+            sub_table.count += 1
+            self.count += 1
+
+        sub_table.array[index2] = (key[1], data)
+
+        if len(sub_table) > sub_table.table_size / 2:
+            sub_table._rehash()
 
     def __delitem__(self, key: tuple[K1, K2]) -> None:
         """
@@ -133,7 +208,15 @@ class DoubleKeyTable(Generic[K1, K2, V]):
 
         :raises KeyError: when the key doesn't exist.
         """
-        raise NotImplementedError()
+        index1, index2 = self._linear_probe(key[0], key[1], False)
+        sub_table = self.array[index1]
+
+        sub_table.array[index2] = None
+        sub_table.count -= 1
+        self.count -= 1
+
+        if sub_table.is_empty():
+            self.array[index1] = None
 
     def _rehash(self) -> None:
         """
@@ -145,17 +228,18 @@ class DoubleKeyTable(Generic[K1, K2, V]):
         """
         raise NotImplementedError()
 
+    @property
     def table_size(self) -> int:
         """
         Return the current size of the table (different from the length)
         """
-        raise NotImplementedError()
+        return len(self.array)
 
     def __len__(self) -> int:
         """
         Returns number of elements in the hash table
         """
-        raise NotImplementedError()
+        return self.count
 
     def __str__(self) -> str:
         """
