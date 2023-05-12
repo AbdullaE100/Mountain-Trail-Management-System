@@ -67,17 +67,36 @@ class Trail:
     store: TrailStore = None
 
     def add_mountain_before(self, mountain: Mountain) -> Trail:
-        """Adds a mountain before everything currently in the trail."""
+        """Adds a mountain before everything currently in the trail.
+    Adds a mountain before everything currently in the trail.
+
+    :param mountain: The Mountain instance to be added before the current trail.
+    :return: A new Trail instance with the added mountain before the current trail.
+
+    :complexity: O(1) because it directly constructs a new TrailSeries and a new Trail instance.
+    """
         return Trail(TrailSeries(mountain, Trail(self.store)))
 
     def add_empty_branch_before(self) -> Trail:
-        """Adds an empty branch before everything currently in the trail."""
+        """Adds an empty branch before everything currently in the trail.Adds an empty branch before everything currently in the trail.
+
+    :return: A new Trail instance with the added empty branch before the current trail.
+
+    :complexity: O(1) because it directly constructs a new TrailSplit and a new Trail instance.
+    """
         return Trail(TrailSplit(Trail(None), Trail(None), Trail(self.store)))
 
     def follow_path(self, personality: WalkerPersonality) -> None:
         """
         Follow a path and add mountains according to a personality. 
         This implementation uses a stack to avoid recursion.
+        Follow a path and add mountains according to a personality.
+    This implementation uses a stack to avoid recursion.
+
+    :param personality: The WalkerPersonality instance used to select branches during traversal.
+
+    :complexity: O(N) where N is the number of TrailSeries (mountains) and TrailSplit (branches) in the trail.
+                 Each mountain and branch is visited once.
         """
         stack = [(self.store, False)]  # Initialize stack with the root store and a flag indicating if the branch has been visited
         while stack:  # Continue until the stack is empty
@@ -94,10 +113,26 @@ class Trail:
                     stack.append((current.path_follow.store, False))  # Push the following store to the stack
 
     def collect_all_mountains(self) -> List[Mountain]:
-            """Returns a list of all mountains on the trail."""
+            """Returns a list of all mountains on the trail.
+             Returns a list of all mountains on the trail.
+
+    :return: A list containing all Mountain instances in the trail.
+
+    :complexity: O(N) where N is the number of TrailSeries (mountains) and TrailSplit (branches) in the trail.
+                 The helper function is called once for each mountain and branch."""
             return self._collect_all_mountains_helper(self)
 
     def _collect_all_mountains_helper(self, current_trail) -> List[Mountain]:
+        """
+        A helper function for collect_all_mountains.
+        Recursively collects all Mountain instances in the given trail.
+
+        :param current_trail: The current Trail instance being processed.
+        :return: A list containing all Mountain instances in the current_trail.
+
+        :complexity: O(N) where N is the number of TrailSeries (mountains) and TrailSplit (branches) in the trail.
+                    The function is called once for each mountain and branch.
+        """
         empty = Trail(None)
         mountain_list = []
 
@@ -126,65 +161,78 @@ class Trail:
 
     def length_k_paths(self, k) -> list[list[Mountain]]: # Input to this should not exceed k > 50, at most 5 branches.
         """
-        Returns a list of all paths of containing exactly k mountains.
+        Returns a list of all paths containing exactly k mountains.
         Paths are represented as lists of mountains.
 
         Paths are unique if they take a different branch, even if this results in the same set of mountains.
+
+        :param k: The number of mountains in each path.
+        :return: A list of lists containing Mountain instances, where each inner list represents a path of length k.
+
+        :complexity: O(N * M) where N is the number of total paths and M is the maximum path length.
+                    This is the complexity of calling find_all_paths() and filtering the result.
         """
-        total_path = self.search_all_path()
+        total_path = self.find_all_paths()
         length_k_path = [path for path in total_path if len(path) == k]
 
         return length_k_path
 
-    def search_all_path(self) -> list[list[Mountain]]:
+    def find_all_paths(self) -> list[list[Mountain]]:
         """
-        Helper function for length_k_paths.
+        Helper function for paths_of_length_k.
+        Finds all paths in the trail.
+
+        :return: A list of lists containing Mountain instances, where each inner list represents a path.
+
+        :complexity: O(N * M) where N is the number of total paths and M is the maximum path length.
+                    The function recursively traverses the trail, visiting each mountain and branch.
         """
         current_trail = self
 
         if current_trail == Trail(None):
             return [[]]
         elif isinstance(current_trail.store, TrailSplit):
-            trail_top = current_trail.store.path_top
-            trail_bottom = current_trail.store.path_bottom
-            trail_follow = current_trail.store.path_follow
+            top_trail = current_trail.store.path_top
+            bottom_trail = current_trail.store.path_bottom
+            follow_trail = current_trail.store.path_follow
 
-            all_path_top = trail_top.search_all_path()  # [[Mountain]]
-            all_path_bottom = trail_bottom.search_all_path()
-            all_path_follow = trail_follow.search_all_path()
+            all_paths_top = top_trail.find_all_paths()  # [[Mountain]]
+            all_paths_bottom = bottom_trail.find_all_paths()
+            all_paths_follow = follow_trail.find_all_paths()
             
-            total_path = self.extend_list(all_path_top, all_path_bottom,True)
-            total_path = self.extend_list(total_path, all_path_follow,False)
+            combined_paths = self.join_or_extend_paths(all_paths_top, all_paths_bottom, True)
+            combined_paths = self.join_or_extend_paths(combined_paths, all_paths_follow, False)
 
-            return total_path
+            return combined_paths
         elif isinstance(current_trail.store, TrailSeries):
-            initial_mountain = current_trail.store.mountain
-            trail_follow = current_trail.store.following
+            first_mountain = current_trail.store.mountain
+            follow_trail = current_trail.store.following
 
-            call_stack = LinkedStack()
-            total_path = [[initial_mountain]]
-            call_stack.push(trail_follow)
+            stack = LinkedStack()
+            combined_paths = [[first_mountain]]
+            stack.push(follow_trail)
 
-            while not call_stack.is_empty():
-                current_trail = call_stack.pop()
-                total_path = self.extend_list(total_path, current_trail.search_all_path(),False)
-            return total_path
+            while not stack.is_empty():
+                current_trail = stack.pop()
+                combined_paths = self.join_or_extend_paths(combined_paths, current_trail.find_all_paths(), False)
+            return combined_paths
         
 
 
-    def extend_list(self, first_part: list[list[Mountain]], second_part: list[list[Mountain]], is_join) -> list[list[Mountain]]:
-        """
-        Return all combination of paths from first part and second part
-        Example: 
-        first_part = [[a],[b]]
-        second_part = [[c,d],[e]]
-        if is_join is True, just extends
-            return [[a],[b],[c,d],[e]]
-        else
-            return [[a,c,d],[a,e],[b,c,d],[b,e]]
-        """
-        if is_join:
-            first_part.extend(second_part)
-            return first_part
-        else:
-            return [first + second for first in first_part for second in second_part] # all combination
+    def join_or_extend_paths(self, first_set: list[list[Mountain]], second_set: list[list[Mountain]], join) -> list[list[Mountain]]:
+            """
+            Joins or extends the path lists based on the 'join' parameter.
+
+            :param first_set: A list of lists containing Mountain instances, where each inner list represents a path.
+            :param second_set: A list of lists containing Mountain instances, where each inner list represents a path.
+            :param join: A boolean value that indicates whether to join the two path lists (True) or extend them (False).
+            :return: A list of lists containing Mountain instances, where each inner list represents a path.
+
+            :complexity: O(N * M) where N is the number of paths in the first_set and M is the number of paths in the second_set.
+                        The function iterates through each combination of paths from the two sets.
+            """
+            if join:
+                first_set.extend(second_set)
+                return first_set
+            else:
+                return [first + second for first in first_set for second in second_set]

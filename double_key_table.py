@@ -26,6 +26,37 @@ class DoubleKeyTable(Generic[K1, K2, V]):
     HASH_BASE = 31
 
     def __init__(self, sizes:list|None=None, internal_sizes:list|None=None) -> None:
+        """
+        Initializes the DoubleKeyTable instance.
+
+        Parameters:
+        ----------
+        sizes : list or None
+            If provided, the top-level table sizes are set to this value.
+            If None, default values from self.TABLE_SIZES are used.
+
+        internal_sizes : list or None
+            If provided, the internal table sizes are set to this value.
+            If None, default values from self.INTERNAL_TABLE_SIZES are used.
+
+        Attributes:
+        ----------
+        count : int
+            Number of elements in the DoubleKeyTable.
+
+        size_index : int
+            Index to track the size of the top-level table for resizing purposes.
+
+        array : ArrayR
+            The top-level array that stores internal hash tables.
+
+        Complexity:
+        ----------
+        Time: O(1)
+            Initialization of the instance takes constant time.
+        Space: O(n)
+            Space complexity is determined by the size of the top-level hash table and internal hash tables.
+        """
         if sizes is not None:
             self.TABLE_SIZES = sizes
         else:
@@ -70,9 +101,50 @@ class DoubleKeyTable(Generic[K1, K2, V]):
 
         :raises KeyError: When the key pair is not in the table, but is_insert is False.
         :raises FullError: When a table is full and cannot be inserted.
+        Find the correct position for this key in the hash table using linear probing.
+
+        Parameters:
+        ----------
+        key1 : K1
+            The first key of the key pair.
+
+        key2 : K2
+            The second key of the key pair.
+
+        is_insert : bool
+            If True, indicates that the method is being called for an insertion operation.
+            If False, indicates that the method is being called for a retrieval or deletion operation.
+
+        Returns:
+        ----------
+        position1 : int
+            The position of the first key in the top-level hash table.
+
+        position2 : int
+            The position of the second key in the internal hash table.
+
+        Raises:
+        ----------
+        KeyError:
+            When the key pair is not in the table, and is_insert is False.
+
+        FullError:
+            When a table is full and cannot be inserted.
+
+        Complexity:
+        ----------
+        Time: O(1) - Average case
+            In most cases, the time complexity of linear probing is constant time.
+        Time: O(n) - Worst case
+            In the worst case, the time complexity is linear if the table is almost full.
+        Space: O(1)
+            The space complexity is constant as no additional data structures are used.
+        
         """
         position1 = self.hash1(key1)
-        for _ in range(self.TABLE_SIZES[self.size_index]):
+        probe_count = 0
+
+        while probe_count < self.TABLE_SIZES[self.size_index]:
             if self.array[position1] is None:
                 if is_insert:
                     low_level_table = LinearProbeTable(self.INTERNAL_TABLE_SIZES)
@@ -88,6 +160,8 @@ class DoubleKeyTable(Generic[K1, K2, V]):
                 return (position1, position2)
             else:
                 position1 = (position1 + 1) % self.table_size
+                probe_count += 1
+
         if is_insert:
             raise FullError("Table is full!")
         else:
@@ -99,6 +173,12 @@ class DoubleKeyTable(Generic[K1, K2, V]):
             Returns an iterator of all top-level keys in hash table
         key = k:
             Returns an iterator of all keys in the bottom-hash-table for k.
+            Args:
+         key (Optional[K1], optional): If provided, returns an iterator of all keys in the bottom-hash-table for the given key. 
+                                  If not provided, returns an iterator of all top-level keys in the hash table.
+
+        Complexity:
+            O(n) where n is the number of elements in the hash table.
         """
         if key is None:
             for x in range(self.table_size):
@@ -111,25 +191,17 @@ class DoubleKeyTable(Generic[K1, K2, V]):
                         for y in range(self.array[x][1].table_size):
                             if self.array[x][1].array[y] is not None:
                                 yield self.array[x][1].array[y][0]
-        # if key is None:
-        #     for x in range(self.table_size):
-        #         if self.array[x] is not None:
-        #             yield self.array[x][0]
-        # else:
-        #     position = self.hash1(key)
-        #     for _ in range(self.table_size):
-        #         if self.array[position][0] == key:
-        #             for k in self.array[position][1].keys():
-        #                 yield k
-        #             return
-        #         else:
-        #             position = (position + 1) % self.table_size
-        # return
 
     def keys(self, key:K1|None=None) -> list[K1]:
         """
         key = None: returns all top-level keys in the table.
         key = x: returns all bottom-level keys for top-level key x.
+        Args:
+    key (Optional[K1], optional): If provided, returns all bottom-level keys for the given top-level key. 
+                                  If not provided, returns all top-level keys in the table.
+
+        Complexity:
+            O(n) where n is the number of elements in the hash table.
         """
         if key is None:
             keys = []
@@ -144,25 +216,6 @@ class DoubleKeyTable(Generic[K1, K2, V]):
                     return self.array[position][1].keys()
                 else:
                     position = (position + 1) % self.table_size
-        # if key is None:
-        #     keys = []
-        #     for i in range(self.table_size):
-        #         if self.array[i] is not None:
-        #             keys.append(self.array[i][0])
-        #     return keys
-        # else:
-        #     position = self.hash_func(key)
-        #     for i in range(self.table_size):
-        #         if self.array[position] is None:
-        #             raise KeyError(f"Key {key} not found in hash table.")
-        #         elif self.array[position][0] == key:
-        #             if isinstance(self.array[position][1], dict):
-        #                 return list(self.array[position][1].keys())
-        #             else:
-        #                 raise ValueError(f"Sub-table for key {key} is not a dictionary.")
-        #         else:
-        #             position = (position + 1) % self.table_size
-        #     raise KeyError(f"Key {key} not found in hash table.")
 
     def iter_values(self, key:K1|None=None) -> Iterator[V]:
         """
@@ -170,6 +223,13 @@ class DoubleKeyTable(Generic[K1, K2, V]):
             Returns an iterator of all values in hash table
         key = k:
             Returns an iterator of all values in the bottom-hash-table for k.
+        Args:
+        key (Optional[K1], optional): If provided, returns an iterator of all values in the bottom-hash-table for the given key. 
+                                  If not provided, returns an iterator of all values in the hash table.
+
+        Complexity:
+            O(n) where n is the number of elements in the hash table.
+        
         """
         if key is None:
             for x in range(self.table_size):
@@ -189,6 +249,12 @@ class DoubleKeyTable(Generic[K1, K2, V]):
         """
         key = None: returns all values in the table.
         key = x: returns all values for top-level key x.
+        Args:
+        key (Optional[K1], optional): If provided, returns all values for the given top-level key. 
+                                  If not provided, returns all values in the table.
+
+        Complexity:
+            O(n) where n is the number of elements in the hash table.
         """
         if key is None:
             keys = []
@@ -209,6 +275,14 @@ class DoubleKeyTable(Generic[K1, K2, V]):
         Checks to see if the given key is in the Hash Table
 
         :complexity: See linear probe.
+        Args:
+            key (Tuple[K1, K2]): The key to check.
+
+        Returns:
+            bool: True if the key is in the hash table, False otherwise.
+
+        Complexity:
+            O(1) for the best case, O(n) for the worst case (linear probe).
         """
         try:
             _ = self[key]
@@ -223,6 +297,17 @@ class DoubleKeyTable(Generic[K1, K2, V]):
         Get the value at a certain key
 
         :raises KeyError: when the key doesn't exist.
+        Args:
+            key (Tuple[K1, K2]): The key to get the value for.
+
+        Returns:
+            V: The value at the given key.
+
+        Raises:
+            KeyError: When the key doesn't exist.
+
+        Complexity:
+    O(1) for the best case, O(n) for the worst case (linear probe).
         """
         position1, position2 = self._linear_probe(key[0], key[1], True)
         if self.array[position1] is not None:
@@ -231,6 +316,13 @@ class DoubleKeyTable(Generic[K1, K2, V]):
     def __setitem__(self, key: tuple[K1, K2], data: V) -> None:
         """
         Set an (key, value) pair in our hash table.
+        Args:
+            key (Tuple[K1, K2]): The key to set the value for.
+            data (V): The value to set for the given key.
+
+        Complexity:
+            O(1) for the best case, O(n) for the worst case (linear probe).
+            Additionally, O(n) for rehashing if the table is more than half full.
         """
         position1, position2 = self._linear_probe(key[0], key[1], True)
         self.array[position1][1][key[1]] = data
@@ -243,6 +335,15 @@ class DoubleKeyTable(Generic[K1, K2, V]):
         Deletes a (key, value) pair in our hash table.
 
         :raises KeyError: when the key doesn't exist.
+        Copy code
+        Args:
+            key (Tuple[K1, K2]): The key to delete.
+
+        Raises:
+            KeyError: When the key doesn't exist.
+
+        Complexity:
+            O(1) for the best case, O(n) for the worst case (linear probe).
         """
         k1, k2 = key
         try:
@@ -261,6 +362,10 @@ class DoubleKeyTable(Generic[K1, K2, V]):
         :complexity best: O(N*hash(K)) No probing.
         :complexity worst: O(N*hash(K) + N^2*comp(K)) Lots of probing.
         Where N is len(self)
+            Complexity:
+        Best case: O(N * hash(K)) where no probing is required.
+        Worst case: O(N * hash(K) + N^2 * comp(K)) where lots of probing is required.
+        N is the number of elements in the hash table.
         """
         old_array = self.array
         self.size_index += 1
@@ -279,12 +384,22 @@ class DoubleKeyTable(Generic[K1, K2, V]):
     def table_size(self) -> int:
         """
         Return the current size of the table (different from the length)
+        Returns:
+            int: The size of the table.
+
+        Complexity:
+            O(1)
         """
         return len(self.array)
 
     def __len__(self) -> int:
         """
         Returns number of elements in the hash table
+        Returns:
+        int: The number of elements in the hash table.
+
+        Complexity:
+            O(n) where n is the number of elements in the hash table.
         """
         return len(self.values())
 
